@@ -27,7 +27,7 @@ function UploadImage() {
   };
 
   const postImage = async (baseUrl: string, form: FormData) => {
-    const resp = await fetch(`${baseUrl.replace(/\/$/, "")}/upload`, {
+    const resp = await fetch(`${baseUrl.replace(/\/$/, "")}/upload/`, {
       method: "POST",
       body: form,
     });
@@ -72,7 +72,7 @@ function UploadImage() {
         <input
           id="file"
           type="file"
-          accept="image/*"
+          accept=".png, .jpg, .jpeg"
           onChange={handleFileChange}
           className="sr-only"
         />
