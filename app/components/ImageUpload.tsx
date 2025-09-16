@@ -27,7 +27,7 @@ function UploadImage() {
   };
 
   const postImage = async (baseUrl: string, form: FormData) => {
-    const resp = await fetch(`${baseUrl.replace(/\/$/, "")}/upload`, {
+    const resp = await fetch(`${baseUrl.replace(/\/$/, "")}/upload/`, {
       method: "POST",
       body: form,
     });
@@ -42,7 +42,8 @@ function UploadImage() {
     setResult(null);
 
     const formData = new FormData();
-    formData.append("file", selectedFile);
+    formData.append("image", selectedFile);
+    formData.append("uploaded_at", "0");
 
     try {
       // Try real backend first if configured
