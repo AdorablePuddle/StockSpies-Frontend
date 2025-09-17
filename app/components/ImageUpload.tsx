@@ -111,7 +111,7 @@ function UploadImage() {
       {result && (
         <div className="mt-4 rounded-md border border-gray-200/30 p-4">
           <p>
-            <span className="font-semibold">Stock Level:</span> {result.stock_percentage}
+            <span className="font-semibold">Stock Level:</span> {result.stock_percentage}%
           </p>
           <p>
             <span className="font-semibold">Type:</span> {result.type}
