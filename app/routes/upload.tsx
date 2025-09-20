@@ -1,10 +1,10 @@
 import UploadImage from "../components/ImageUpload";
+import { DashboardLayout } from "../components/layouts/DashboardLayout";
 
 export default function UploadPage() {
   return (
-    <main className="mx-auto w-full max-w-2xl p-6">
-      <h2 className="mb-4 text-2xl font-semibold">Upload Stock Image</h2>
+    <DashboardLayout title="All Stock" activeNav="cameras">
       <UploadImage />
-    </main>
+    </DashboardLayout>
   );
 }
