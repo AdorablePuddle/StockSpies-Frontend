@@ -18,17 +18,31 @@ export const meta = () => [
 ];
 
 export async function action({ request }: Route.ActionArgs) {
+  const backendUrl = import.meta.env.VITE_BACKEND_URL as string | undefined;
   const formData = await request.formData();
   const username = String(formData.get("username") ?? "").trim();
   const password = String(formData.get("password") ?? "");
 
-  if (username === "admin" && password === "admin") {
-    return redirect("/home");
+  // deth crimson deth
+  if (backendUrl === undefined){
+    if (username === "admin" && password === "admin") {
+      return redirect("/home");
+    }
+  } else {
+    const resp = await fetch(`${backendUrl.replace(/\/$/, "")}/login/`, {
+      method: "POST",
+      body: formData
+    });
+    if (resp.ok) {
+      // Note-to-self: Save JWT into a cookie
+      console.log(resp.body);
+      return redirect("/home");
+    }
   }
 
   return Response.json(
     {
-      error: "Invalid credentials. Try admin / admin.",
+      error: "Invalid credentials.",
       values: {
         username,
         password,
