@@ -3,6 +3,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useInventory } from "../context/inventory";
 import type { Detection, InventorySnapshot } from "../types/inventory";
 
+import Cookies from "js-cookie";
+
 const createMockResponse = (): InventorySnapshot => ({
   batchTimestamp: new Date().toISOString(),
   detections: [
@@ -115,7 +117,7 @@ function UploadImage() {
       return createMockResponse();
     }
 
-    const resp = await fetch(`${baseUrl.replace(/\/$/, "")}/upload`, {
+    const resp = await fetch(`${baseUrl.replace(/\/$/, "")}/upload/`, {
       method: "POST",
       body: form,
     });
@@ -134,6 +136,9 @@ function UploadImage() {
 
     const formData = new FormData();
     formData.append("file", selectedFile);
+
+    const cookies = Cookies.get("login_token");
+    console.log(cookies);
 
     try {
       // Try real backend first if configured

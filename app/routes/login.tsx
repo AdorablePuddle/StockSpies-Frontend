@@ -1,5 +1,6 @@
 import type { Route } from "./+types/login";
 import { Form, redirect, useActionData } from "react-router";
+import Cookies from 'js-cookie';
 
 type ActionData = {
   error: string;
@@ -35,7 +36,8 @@ export async function action({ request }: Route.ActionArgs) {
     });
     if (resp.ok) {
       // Note-to-self: Save JWT into a cookie
-      console.log(resp.body);
+      const R = await resp.json();
+      Cookies.set("login_token", R);
       return redirect("/home");
     }
   }
