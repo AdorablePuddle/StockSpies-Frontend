@@ -45,6 +45,8 @@ function UploadImage() {
   };
 
   const normalizeDetections = (payload: unknown): InventorySnapshot => {
+    // debug thingy, remember to wipe.
+    console.log(payload)
     const toDetection = (raw: any): Detection | null => {
       if (!raw || typeof raw !== "object") return null;
 
@@ -178,7 +180,7 @@ function UploadImage() {
         </div>
         <h2 className="mt-6 text-lg font-semibold text-slate-900">Upload camera snapshot</h2>
         <p className="mt-2 text-sm text-slate-500">
-          Please upload a square image under 10MB. Supported formats: JPG, PNG.
+          Please upload a square image under 10MB. Supported formats: PNG.
         </p>
 
         <div className="mt-8 flex flex-col items-center gap-3 md:flex-row md:justify-center">
