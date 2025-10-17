@@ -1,8 +1,13 @@
 import type { Route } from "./+types/home";
-
 import { DashboardLayout } from "../components/layouts/DashboardLayout";
 import { useInventory } from "../context/inventory";
 import type { Detection } from "../types/inventory";
+import { requireAuth } from "../utils/auth.server";
+
+export async function loader({ request }: Route.LoaderArgs) {
+  await requireAuth(request);
+  return null;
+}
 
 const FAVORITES = [
   { label: "Strawberries", emoji: "🍓" },

@@ -1,9 +1,13 @@
 import type { Route } from "./+types/logout";
 import { redirect } from "react-router";
+import { destroyAuthToken } from "../utils/auth.server";
 
 export async function action({}: Route.ActionArgs) {
-  // Placeholder for future auth clearing logic
-  return redirect("/login");
+  return redirect("/login", {
+    headers: {
+      "Set-Cookie": await destroyAuthToken(),
+    },
+  });
 }
 
 export default function LogoutRoute() {
