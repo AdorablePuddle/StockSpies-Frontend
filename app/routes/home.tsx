@@ -15,8 +15,9 @@ const FAVORITES = [
   { label: "Bananas", emoji: "🍌" },
 ];
 
-const HIGH_THRESHOLD = 20;
-const MEDIUM_THRESHOLD = 11;
+const MEDIUM_THRESHOLD = 35;
+const HIGH_THRESHOLD = 75;
+const OVERSTOCK_THRESHOLD = 100;
 
 const ICON_BUTTON_CLASS =
   "flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white transition hover:border-red-400 hover:text-red-500";
@@ -42,19 +43,10 @@ function getDetectionLookup(detections: Detection[]) {
   return lookup;
 }
 
-function classifyLevel(item: Detection): "low" | "medium" | "high" {
-  if (typeof item.quantity === "number") {
-    if (item.quantity >= 20) return "high";
-    if (item.quantity >= 11) return "medium";
-    return "low";
-  }
-
-  if (typeof item.stockPercentage === "number") {
-    if (item.stockPercentage >= 70) return "high";
-    if (item.stockPercentage >= 40) return "medium";
-    return "low";
-  }
-
+function classifyPercentLevel(percent: number): "low" | "medium" | "high" | "overstock" {
+  if (percent > OVERSTOCK_THRESHOLD) return "overstock";
+  if (percent >= HIGH_THRESHOLD) return "high";
+  if (percent >= MEDIUM_THRESHOLD) return "medium";
   return "low";
 }
 
@@ -86,20 +78,20 @@ export default function Home() {
 
   const primaryValues = detections
     .map((item) =>
-      typeof item.quantity === "number"
-        ? item.quantity
-        : typeof item.stockPercentage === "number"
-          ? item.stockPercentage
+      typeof item.stockPercentage === "number"
+        ? item.stockPercentage
+        : typeof item.quantity === "number"
+          ? item.quantity
           : null
     )
     .filter((value): value is number => value !== null && !Number.isNaN(value));
 
   const maxValue = primaryValues.length ? Math.max(...primaryValues) : 0;
-  const referenceValue = Math.max(maxValue, HIGH_THRESHOLD, MEDIUM_THRESHOLD, 1);
+  const referenceValue = Math.max(maxValue, OVERSTOCK_THRESHOLD, HIGH_THRESHOLD, MEDIUM_THRESHOLD, 1);
 
   const axisLines = [
-    { label: "High", normalized: Math.min(1, HIGH_THRESHOLD / referenceValue) },
-    { label: "Medium", normalized: Math.min(1, MEDIUM_THRESHOLD / referenceValue) },
+    { label: "High", normalized: Math.min(1, 100 / referenceValue) },
+    { label: "Medium", normalized: Math.min(1, 50 / referenceValue) },
     { label: "Low", normalized: 0 },
   ];
 
@@ -244,28 +236,30 @@ export default function Home() {
                       </p>
                     ) : (
                       detections.map((item, index) => {
-                        const level = classifyLevel(item);
                         const rawValue =
-                          typeof item.quantity === "number"
-                            ? item.quantity
-                            : typeof item.stockPercentage === "number"
-                              ? item.stockPercentage
+                          typeof item.stockPercentage === "number"
+                            ? item.stockPercentage
+                            : typeof item.quantity === "number"
+                              ? item.quantity
                               : 0;
                         const normalizedValue = referenceValue ? rawValue / referenceValue : 0;
+                        const percentValue =
+                          typeof item.stockPercentage === "number"
+                            ? Math.round(item.stockPercentage)
+                            : Math.round(normalizedValue * 100);
+                        const level = classifyPercentLevel(percentValue);
                         const heightPercent = Math.max(0.12, Math.min(1, normalizedValue)) * 100;
-                        const title = `${item.label} - ${
-                          typeof item.quantity === "number"
-                            ? `${item.quantity} units`
-                            : typeof item.stockPercentage === "number"
-                              ? `${item.stockPercentage}%`
-                              : "n/a"
+                        const title = `${item.label} - ${percentValue}%${
+                          typeof item.quantity === "number" ? ` (${item.quantity} units)` : ""
                         }`;
                         const barColor =
-                          level === "high"
-                            ? "from-emerald-500 to-emerald-400"
-                            : level === "medium"
-                              ? "from-amber-500 to-amber-400"
-                              : "from-red-500 to-red-400";
+                          level === "overstock"
+                            ? "from-sky-500 to-sky-400"
+                            : level === "high"
+                              ? "from-emerald-500 to-emerald-400"
+                              : level === "medium"
+                                ? "from-amber-500 to-amber-400"
+                                : "from-red-500 to-red-400";
 
                         const flexBasis = `${100 / Math.max(1, detections.length)}%`;
 
@@ -293,18 +287,24 @@ export default function Home() {
                     {detections.length === 0 ? (
                       <span className="text-xs text-slate-400">Awaiting data</span>
                     ) : (
-                      detections.map((item, index) => (
-                        <div key={`${item.label}-${index}`} className="flex flex-1 flex-col items-center gap-1">
-                          <p className="truncate text-sm font-medium text-slate-700">{item.label}</p>
-                          <p className="text-xs text-slate-400">
-                            {typeof item.quantity === "number"
-                              ? `${item.quantity} units`
-                              : typeof item.stockPercentage === "number"
-                                ? `${item.stockPercentage}%`
-                                : "—"}
-                          </p>
-                        </div>
-                      ))
+                      detections.map((item, index) => {
+                        const rawValue =
+                          typeof item.stockPercentage === "number"
+                            ? item.stockPercentage
+                            : typeof item.quantity === "number"
+                              ? item.quantity
+                              : 0;
+                        const percentValue =
+                          typeof item.stockPercentage === "number"
+                            ? Math.round(item.stockPercentage)
+                            : Math.round((rawValue / referenceValue) * 100);
+                        return (
+                          <div key={`${item.label}-${index}`} className="flex flex-1 flex-col items-center gap-1">
+                            <p className="truncate text-sm font-medium text-slate-700">{item.label}</p>
+                            <p className="text-xs text-slate-400">{`${Math.max(0, percentValue)}%`}</p>
+                          </div>
+                        );
+                      })
                     )}
                   </div>
                 </div>
