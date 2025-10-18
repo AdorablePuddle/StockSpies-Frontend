@@ -1,6 +1,6 @@
 import type { Route } from "./+types/login";
 import { Form, redirect, useActionData } from "react-router";
-import Cookies from 'js-cookie';
+import { commitAuthToken, extractAuthToken } from "../utils/auth.server";
 
 type ActionData = {
   error: string;
@@ -27,7 +27,12 @@ export async function action({ request }: Route.ActionArgs) {
   // deth crimson deth
   if (backendUrl === undefined){
     if (username === "admin" && password === "admin") {
-      return redirect("/home");
+      const cookie = await commitAuthToken("dev-login");
+      return redirect("/home", {
+        headers: {
+          "Set-Cookie": cookie,
+        },
+      });
     }
   } else {
     const resp = await fetch(`${backendUrl.replace(/\/$/, "")}/login/`, {
@@ -35,10 +40,13 @@ export async function action({ request }: Route.ActionArgs) {
       body: formData
     });
     if (resp.ok) {
-      // Note-to-self: Save JWT into a cookie
-      const R = await resp.json();
-      Cookies.set("login_token", R);
-      return redirect("/home");
+      const payload = await resp.json();
+      const token = extractAuthToken(payload) ?? "authenticated";
+      return redirect("/home", {
+        headers: {
+          "Set-Cookie": await commitAuthToken(token),
+        },
+      });
     }
   }
 
