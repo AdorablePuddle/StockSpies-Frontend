@@ -2,15 +2,13 @@ import type { Route } from "./+types/favorites";
 import { useEffect, useState } from "react";
 import { DashboardLayout } from "../components/layouts/DashboardLayout";
 import { requireAuth } from "../utils/auth.server";
-import { useFavorites } from "../context/favorites";
+import { MAX_FAVORITES, useFavorites } from "../context/favorites";
 import { useNavigate } from "react-router";
 
 export async function loader({ request }: Route.LoaderArgs) {
   await requireAuth(request);
   return null;
 }
-
-const MAX_FAVORITES = 3;
 
 export default function FavoritesRoute() {
   const navigate = useNavigate();

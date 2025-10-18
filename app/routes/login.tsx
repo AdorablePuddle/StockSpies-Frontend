@@ -65,8 +65,8 @@ export async function action({ request }: Route.ActionArgs) {
 export default function LoginRoute() {
   const actionData = useActionData<ActionData>();
 
-  const usernameDefault = actionData?.values?.username ?? "admin";
-  const passwordDefault = actionData?.values?.password ?? "admin";
+  const usernameDefault = actionData?.values?.username ?? "";
+  const passwordDefault = actionData?.values?.password ?? "";
 
   return (
     <main className="flex min-h-screen flex-col bg-white text-gray-900 md:flex-row">

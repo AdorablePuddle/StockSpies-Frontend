@@ -16,7 +16,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { useFavorites } from "../context/favorites";
+import { resolveFavoriteOption, useFavorites } from "../context/favorites";
 import { useNotifications, type NotificationItem } from "../context/notifications";
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -47,6 +47,10 @@ function getDetectionLookup(detections: Detection[]) {
     const key = item.label.toLowerCase();
     if (!lookup.has(key)) {
       lookup.set(key, item);
+    }
+    const resolved = resolveFavoriteOption(item.label);
+    if (resolved && !lookup.has(resolved)) {
+      lookup.set(resolved, item);
     }
   });
   return lookup;
