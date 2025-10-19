@@ -1,6 +1,8 @@
+import { useEffect } from "react";
 import type { Route } from "./+types/login";
 import { Form, redirect, useActionData } from "react-router";
 import { commitAuthToken, extractAuthToken } from "../utils/auth.server";
+import { createIcons, icons } from "lucide";
 
 type ActionData = {
   error: string;
@@ -67,6 +69,10 @@ export default function LoginRoute() {
 
   const usernameDefault = actionData?.values?.username ?? "";
   const passwordDefault = actionData?.values?.password ?? "";
+
+  useEffect(() => {
+    createIcons({ icons });
+  });
 
   return (
     <main className="flex min-h-screen flex-col bg-white text-gray-900 md:flex-row">
@@ -161,15 +167,17 @@ export default function LoginRoute() {
               <div className="flex justify-center gap-3">
                 <button
                   type="button"
+                  aria-label="Sign in with Facebook"
                   className="inline-flex h-12 w-16 items-center justify-center rounded-xl border border-gray-200 bg-white text-lg text-blue-500 transition hover:border-red-200 hover:text-blue-600"
                 >
-                  ✉️
+                  <i aria-hidden="true" className="h-5 w-5" data-lucide="facebook" />
                 </button>
                 <button
                   type="button"
+                  aria-label="Sign in with GitHub"
                   className="inline-flex h-12 w-16 items-center justify-center rounded-xl border border-gray-200 bg-white text-lg text-gray-700 transition hover:border-red-200 hover:text-gray-900"
                 >
-                  ⌘
+                  <i aria-hidden="true" className="h-5 w-5" data-lucide="github" />
                 </button>
                 <button
                   type="button"
