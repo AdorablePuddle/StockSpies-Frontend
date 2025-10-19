@@ -1,22 +1,32 @@
+import { useEffect, useMemo, type ReactNode } from "react";
 import type { Route } from "./+types/home";
 import { DashboardLayout } from "../components/layouts/DashboardLayout";
 import { useInventory } from "../context/inventory";
 import type { Detection } from "../types/inventory";
 import { requireAuth } from "../utils/auth.server";
+import { Link } from "react-router";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  LabelList,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import { resolveFavoriteOption, useFavorites } from "../context/favorites";
+import { useNotifications, type NotificationItem } from "../context/notifications";
 
 export async function loader({ request }: Route.LoaderArgs) {
   await requireAuth(request);
   return null;
 }
 
-const FAVORITES = [
-  { label: "Strawberries", emoji: "🍓" },
-  { label: "Potatoes", emoji: "🥔" },
-  { label: "Bananas", emoji: "🍌" },
-];
-
-const HIGH_THRESHOLD = 20;
-const MEDIUM_THRESHOLD = 11;
+const MEDIUM_THRESHOLD = 35;
+const HIGH_THRESHOLD = 75;
+const OVERSTOCK_THRESHOLD = 100;
 
 const ICON_BUTTON_CLASS =
   "flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white transition hover:border-red-400 hover:text-red-500";
@@ -38,70 +48,117 @@ function getDetectionLookup(detections: Detection[]) {
     if (!lookup.has(key)) {
       lookup.set(key, item);
     }
+    const resolved = resolveFavoriteOption(item.label);
+    if (resolved && !lookup.has(resolved)) {
+      lookup.set(resolved, item);
+    }
   });
   return lookup;
 }
 
-function classifyLevel(item: Detection): "low" | "medium" | "high" {
-  if (typeof item.quantity === "number") {
-    if (item.quantity >= 20) return "high";
-    if (item.quantity >= 11) return "medium";
-    return "low";
-  }
-
-  if (typeof item.stockPercentage === "number") {
-    if (item.stockPercentage >= 70) return "high";
-    if (item.stockPercentage >= 40) return "medium";
-    return "low";
-  }
-
+function classifyPercentLevel(percent: number): "low" | "medium" | "high" | "overstock" {
+  if (percent > OVERSTOCK_THRESHOLD) return "overstock";
+  if (percent >= HIGH_THRESHOLD) return "high";
+  if (percent >= MEDIUM_THRESHOLD) return "medium";
   return "low";
-}
-
-function buildNotifications(detections: Detection[]) {
-  return detections
-    .filter((item) => {
-      if (typeof item.quantity === "number") {
-        return item.quantity < 10;
-      }
-      if (typeof item.stockPercentage === "number") {
-        return item.stockPercentage < 35;
-      }
-      return false;
-    })
-    .map((item) => ({
-      label: item.label,
-      message: `${item.label} stock is low`,
-      timestamp: item.timestamp,
-    }));
 }
 
 export default function Home() {
   const {
     snapshot: { detections, batchTimestamp },
   } = useInventory();
+  const { favorites } = useFavorites();
+  const {
+    active: notifications,
+    reset: resetNotifications,
+    dismiss: dismissNotification,
+    hydrated: notificationsHydrated,
+  } =
+    useNotifications();
 
-  const detectionLookup = getDetectionLookup(detections);
-  const notifications = buildNotifications(detections);
+  const detectionLookup = useMemo(() => getDetectionLookup(detections), [detections]);
 
-  const primaryValues = detections
-    .map((item) =>
-      typeof item.quantity === "number"
-        ? item.quantity
-        : typeof item.stockPercentage === "number"
-          ? item.stockPercentage
-          : null
-    )
-    .filter((value): value is number => value !== null && !Number.isNaN(value));
+  const primaryValues = useMemo(
+    () =>
+      detections
+        .map((item) =>
+          typeof item.stockPercentage === "number"
+            ? item.stockPercentage
+            : typeof item.quantity === "number"
+              ? item.quantity
+              : null
+        )
+        .filter((value): value is number => value !== null && !Number.isNaN(value)),
+    [detections]
+  );
 
   const maxValue = primaryValues.length ? Math.max(...primaryValues) : 0;
-  const referenceValue = Math.max(maxValue, HIGH_THRESHOLD, MEDIUM_THRESHOLD, 1);
+  const referenceValue = Math.max(maxValue, OVERSTOCK_THRESHOLD, HIGH_THRESHOLD, MEDIUM_THRESHOLD, 1);
 
-  const axisLines = [
-    { label: "High", normalized: Math.min(1, HIGH_THRESHOLD / referenceValue) },
-    { label: "Medium", normalized: Math.min(1, MEDIUM_THRESHOLD / referenceValue) },
-    { label: "Low", normalized: 0 },
-  ];
+  const chartData = useMemo(
+    () =>
+      detections.map((item) => {
+        const rawValue =
+          typeof item.stockPercentage === "number"
+            ? item.stockPercentage
+            : typeof item.quantity === "number"
+              ? item.quantity
+              : 0;
+
+        const percentValue =
+          typeof item.stockPercentage === "number"
+            ? Math.round(item.stockPercentage)
+            : referenceValue
+              ? Math.round((rawValue / referenceValue) * 100)
+              : 0;
+
+        const normalizedPercent = Math.max(0, percentValue);
+
+        return {
+          name: item.label,
+          percent: normalizedPercent,
+          units: typeof item.quantity === "number" ? item.quantity : null,
+          level: classifyPercentLevel(normalizedPercent),
+        };
+      }),
+    [detections, referenceValue]
+  );
+
+  const notificationItems = useMemo<NotificationItem[]>(
+    () =>
+      chartData
+        .filter((item) => item.percent < MEDIUM_THRESHOLD)
+        .map((item) => {
+          const detection = detectionLookup.get(item.name.toLowerCase());
+          return {
+            label: item.name,
+            message: `${item.name} stock is low`,
+            timestamp: detection?.timestamp,
+          };
+        }),
+    [chartData, detectionLookup]
+  );
+
+  useEffect(() => {
+    resetNotifications(notificationItems);
+  }, [notificationItems, resetNotifications]);
+
+  const notificationsList = notificationsHydrated ? notifications : notificationItems;
+
+  const chartMaxPercent = chartData.length ? Math.max(...chartData.map((item) => item.percent)) : 0;
+  const yDomain: [number, number] = [0, Math.max(chartMaxPercent, OVERSTOCK_THRESHOLD)];
+  const yTicks =
+    chartMaxPercent > 100
+      ? [0, 50, 100, Math.ceil(chartMaxPercent / 10) * 10]
+      : [0, 50, 100];
+  const chartHeight = chartData.length > 0 ? Math.min(480, Math.max(320, 220 + chartData.length * 12)) : 320;
+  const barCategoryGap = chartData.length > 7 ? "20%" : "28%";
+  const BAR_GRADIENTS = {
+    low: { id: "bar-low", from: "#fda4af", to: "#ef4444" },
+    medium: { id: "bar-medium", from: "#fcd34d", to: "#f59e0b" },
+    high: { id: "bar-high", from: "#6ee7b7", to: "#10b981" },
+    overstock: { id: "bar-overstock", from: "#7dd3fc", to: "#0ea5e9" },
+  } as const;
 
   const headerContent = (
     <div className="flex items-center gap-4">
@@ -148,9 +205,9 @@ export default function Home() {
           />
           <path d="M9.5 19a2.5 2.5 0 0 0 5 0" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
-        {notifications.length > 0 && (
+        {notificationsList.length > 0 && (
           <span className="absolute -top-1 -right-1 inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-500 px-1 text-xs font-semibold text-white">
-            {notifications.length}
+            {notificationsList.length}
           </span>
         )}
       </button>
@@ -175,34 +232,54 @@ export default function Home() {
       headerActions={headerActions}
     >
       <div className="space-y-10">
-        <section className="grid gap-6 xl:grid-cols-3">
-          {FAVORITES.map((item) => {
-            const detection = detectionLookup.get(item.label.toLowerCase());
-            const hasQuantity = typeof detection?.quantity === "number";
-            const displayValue = hasQuantity
-              ? `${detection!.quantity} Units`
-              : typeof detection?.stockPercentage === "number"
-                ? `${detection.stockPercentage}%`
-                : "Awaiting data";
-
-            return (
-              <div
-                key={item.label}
-                className="rounded-3xl bg-gradient-to-br from-red-500 to-red-600 px-6 py-5 text-white shadow-lg"
-              >
-                <div className="flex items-center justify-between text-sm uppercase tracking-wide text-white/80">
-                  <span>{item.label}</span>
-                  <span aria-hidden="true" className="text-2xl">
-                    {item.emoji}
-                  </span>
-                </div>
-                <p className="mt-6 text-3xl font-semibold">{displayValue}</p>
-                {hasQuantity && typeof detection?.stockPercentage === "number" ? (
-                  <p className="text-sm text-white/80">{detection.stockPercentage}% stock</p>
-                ) : null}
+        <section className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-slate-900 uppercase tracking-[0.3em] text-slate-400">
+              Favorites
+            </h2>
+            <Link
+              to="/favorites"
+              className="text-sm font-semibold text-red-500 transition hover:text-red-600"
+            >
+              Edit list
+            </Link>
+          </div>
+          <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
+            {favorites.length === 0 ? (
+              <div className="rounded-3xl border border-dashed border-red-200 bg-white px-6 py-5 text-center text-sm text-red-400 shadow-sm">
+                Add up to three favorites to keep tabs on quick stats.
               </div>
-            );
-          })}
+            ) : (
+              favorites.map((label) => {
+                const detection = detectionLookup.get(label.toLowerCase());
+                const hasQuantity = typeof detection?.quantity === "number";
+                const displayValue = hasQuantity
+                  ? `${detection!.quantity} Units`
+                  : typeof detection?.stockPercentage === "number"
+                    ? `${detection.stockPercentage}%`
+                    : "Awaiting data";
+                const emoji = EMOJI_MAP[label.toLowerCase()] ?? "🛒";
+
+                return (
+                  <div
+                    key={label}
+                    className="rounded-3xl bg-gradient-to-br from-red-500 to-red-600 px-6 py-5 text-white shadow-lg"
+                  >
+                    <div className="flex items-center justify-between text-sm uppercase tracking-wide text-white/80">
+                      <span>{label}</span>
+                      <span aria-hidden="true" className="text-2xl">
+                        {emoji}
+                      </span>
+                    </div>
+                    <p className="mt-6 text-3xl font-semibold">{displayValue}</p>
+                    {hasQuantity && typeof detection?.stockPercentage === "number" ? (
+                      <p className="text-sm text-white/80">{detection.stockPercentage}% stock</p>
+                    ) : null}
+                  </div>
+                );
+              })
+            )}
+          </div>
         </section>
 
         <section className="grid gap-6 lg:grid-cols-[2fr_1.2fr] xl:grid-cols-[2.2fr_1fr]">
@@ -214,101 +291,82 @@ export default function Home() {
                 Latest upload
               </div>
             </div>
-            <div className="mt-6 rounded-3xl bg-slate-50/90 px-6 py-8">
-              <div className="grid grid-cols-[4rem,1fr] gap-4">
-                <div className="relative h-48">
-                  {axisLines.map((line) => (
-                    <span
-                      key={line.label}
-                      className="absolute left-0 text-sm font-semibold text-slate-400"
-                      style={{ bottom: `${line.normalized * 100}%`, transform: "translateY(50%)" }}
-                    >
-                      {line.label}
-                    </span>
-                  ))}
+            <div className="mt-6 rounded-3xl bg-slate-50/90 px-4 py-6">
+              {chartData.length === 0 ? (
+                <div className="flex h-64 items-center justify-center text-sm text-slate-400">
+                  Upload a snapshot to view stock levels.
                 </div>
-                <div className="flex flex-1 flex-col gap-6">
-                  <div className="relative flex h-48 items-end gap-4">
-                    <div className="pointer-events-none absolute inset-0">
-                      {axisLines.map((line) => (
-                        <span
-                          key={line.label}
-                          className="absolute left-0 right-0 h-px w-full rounded-full bg-slate-200/70"
-                          style={{ bottom: `${line.normalized * 100}%` }}
+              ) : (
+                <ResponsiveContainer width="100%" height={chartHeight}>
+                  <BarChart data={chartData} barCategoryGap={barCategoryGap}>
+                    <defs>
+                      {Object.values(BAR_GRADIENTS).map((gradient) => (
+                        <linearGradient key={gradient.id} id={gradient.id} x1="0" y1="1" x2="0" y2="0">
+                          <stop offset="0%" stopColor={gradient.from} />
+                          <stop offset="100%" stopColor={gradient.to} />
+                        </linearGradient>
+                      ))}
+                    </defs>
+                    <CartesianGrid stroke="#e2e8f0" vertical={false} />
+                    <XAxis
+                      dataKey="name"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: "#64748b", fontSize: 12 }}
+                    />
+                    <YAxis
+                      domain={yDomain}
+                      ticks={yTicks}
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: "#94a3b8", fontSize: 12 }}
+                      width={44}
+                      tickFormatter={(value: number) => {
+                        if (value === 0) return "Low";
+                        if (value === 50) return "Medium";
+                        if (value === 100) return "High";
+                        return `${value}%`;
+                      }}
+                    />
+                    <Tooltip
+                      formatter={(value: number) => [`${value}%`, "Stock"]}
+                      labelFormatter={(label: string, payload) => {
+                        const units = payload?.[0]?.payload?.units;
+                        return typeof units === "number" ? `${label} • ${units} units` : label;
+                      }}
+                      cursor={{ fill: "rgba(241, 245, 249, 0.6)" }}
+                      wrapperStyle={{ outline: "none" }}
+                      contentStyle={{
+                        borderRadius: 12,
+                        borderColor: "#e2e8f0",
+                        boxShadow: "0 20px 45px rgba(15, 23, 42, 0.12)",
+                      }}
+                    />
+                    <Bar
+                      dataKey="percent"
+                      radius={[18, 18, 12, 12]}
+                      maxBarSize={64}
+                      isAnimationActive={false}
+                    >
+                      <LabelList
+                        dataKey="percent"
+                        position="top"
+                        formatter={(label: ReactNode) =>
+                          typeof label === "number" ? `${label}%` : label
+                        }
+                        fill="#0f172a"
+                        fontSize={12}
+                      />
+                      {chartData.map((item) => (
+                        <Cell
+                          key={item.name}
+                          fill={`url(#${BAR_GRADIENTS[item.level].id})`}
                         />
                       ))}
-                    </div>
-                    {detections.length === 0 ? (
-                      <p className="relative z-10 text-sm text-slate-400">
-                        Upload a snapshot to view stock levels.
-                      </p>
-                    ) : (
-                      detections.map((item, index) => {
-                        const level = classifyLevel(item);
-                        const rawValue =
-                          typeof item.quantity === "number"
-                            ? item.quantity
-                            : typeof item.stockPercentage === "number"
-                              ? item.stockPercentage
-                              : 0;
-                        const normalizedValue = referenceValue ? rawValue / referenceValue : 0;
-                        const heightPercent = Math.max(0.12, Math.min(1, normalizedValue)) * 100;
-                        const title = `${item.label} - ${
-                          typeof item.quantity === "number"
-                            ? `${item.quantity} units`
-                            : typeof item.stockPercentage === "number"
-                              ? `${item.stockPercentage}%`
-                              : "n/a"
-                        }`;
-                        const barColor =
-                          level === "high"
-                            ? "from-emerald-500 to-emerald-400"
-                            : level === "medium"
-                              ? "from-amber-500 to-amber-400"
-                              : "from-red-500 to-red-400";
-
-                        const flexBasis = `${100 / Math.max(1, detections.length)}%`;
-
-                        return (
-                          <div
-                            key={`${item.label}-${index}`}
-                            className="relative z-10 flex h-full flex-col items-center gap-2"
-                            style={{ flex: `0 1 ${flexBasis}`, minWidth: "2.5rem" }}
-                          >
-                            <div className="flex h-full w-full items-end justify-center">
-                              <div
-                                className={`w-10 rounded-2xl bg-gradient-to-t ${barColor} shadow-inner transition-all duration-300`}
-                                style={{ height: `${heightPercent}%` }}
-                                aria-label={title}
-                              >
-                                <span className="sr-only">{title}</span>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                  <div className="flex items-start gap-4 text-sm text-slate-600">
-                    {detections.length === 0 ? (
-                      <span className="text-xs text-slate-400">Awaiting data</span>
-                    ) : (
-                      detections.map((item, index) => (
-                        <div key={`${item.label}-${index}`} className="flex flex-1 flex-col items-center gap-1">
-                          <p className="truncate text-sm font-medium text-slate-700">{item.label}</p>
-                          <p className="text-xs text-slate-400">
-                            {typeof item.quantity === "number"
-                              ? `${item.quantity} units`
-                              : typeof item.stockPercentage === "number"
-                                ? `${item.stockPercentage}%`
-                                : "—"}
-                          </p>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              </div>
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
             </div>
           </div>
 
@@ -319,21 +377,24 @@ export default function Home() {
                 <span aria-hidden="true">🔔</span>
               </div>
               <p className="text-sm text-white/80">
-                {notifications.length > 0
-                  ? `${notifications.length} alert${notifications.length > 1 ? "s" : ""} pending`
+                {notificationsList.length > 0
+                  ? `${notificationsList.length} alert${notificationsList.length > 1 ? "s" : ""} pending`
                   : "All stock levels look healthy."}
               </p>
             </div>
 
             <div className="flex-1 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-              {notifications.length === 0 ? (
+              {notificationsList.length === 0 ? (
                 <div className="flex h-full items-center justify-center px-6 text-sm text-slate-400">
                   No notifications right now.
                 </div>
               ) : (
                 <ul className="divide-y divide-slate-200">
-                  {notifications.map((item, index) => (
-                    <li key={`${item.label}-${index}`} className="flex items-center gap-3 px-6 py-4">
+                  {notificationsList.map((item, index) => (
+                    <li
+                      key={`${item.label}-${index}`}
+                      className="group flex items-center gap-3 px-6 py-4"
+                    >
                       <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
                       <div className="flex-1">
                         <p className="text-sm font-medium text-slate-800">{item.message}</p>
@@ -343,9 +404,15 @@ export default function Home() {
                             : "Captured in latest upload"}
                         </p>
                       </div>
-                      <span aria-hidden="true" className="text-slate-400">
-                        ⏰
-                      </span>
+                      <button
+                        type="button"
+                        className="text-slate-400 transition group-hover:text-red-500"
+                        onClick={() => dismissNotification(item.label)}
+                        aria-label={`Dismiss ${item.label} notification`}
+                      >
+                        <span className="block group-hover:hidden">⏰</span>
+                        <span className="hidden group-hover:block text-lg leading-none">×</span>
+                      </button>
                     </li>
                   ))}
                 </ul>
@@ -362,3 +429,23 @@ export default function Home() {
     </DashboardLayout>
   );
 }
+  const EMOJI_MAP: Record<string, string> = {
+    apples: "🍎",
+    bananas: "🍌",
+    "red potatoes": "🥔",
+    "yellow potatoes": "🥔",
+    "bagged potatoes": "🥔",
+    "purple onions": "🧅",
+    "red onions": "🧅",
+    onions: "🧅",
+    "russet potatoes": "🥔",
+    cucumbers: "🥒",
+    potatoes: "🥔",
+    "packaged mushrooms": "🍄",
+    eggplants: "🍆",
+    zucchinis: "🥒",
+    "sweet potatoes": "🍠",
+    tomatoes: "🍅",
+    garlic: "🧄",
+    strawberries: "🍓",
+  };
