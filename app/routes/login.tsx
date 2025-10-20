@@ -92,7 +92,7 @@ export default function LoginRoute() {
             AI Stock Level Estimator
           </h1>
           <p className="mt-2 max-w-md text-sm text-white/80 md:text-base">
-            Revolutionizing inventory management with computer vision.
+            Revolutionising inventory management with computer vision.
           </p>
         </div>
       </section>
