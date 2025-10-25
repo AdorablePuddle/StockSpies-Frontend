@@ -15,3 +15,17 @@ cp .env.local .env.local.backup  # optional backup
 
 npm run dev  # http://127.0.0.1:5173
 ```
+
+## Building for production
+
+Once quickstart runs correctly, to build and run for production, run the following commands:
+
+```bash
+npm run build
+
+# Build for production
+
+npm start
+
+# Run that shiiii
+```
