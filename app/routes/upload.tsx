@@ -10,7 +10,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 export default function UploadPage() {
   return (
-    <DashboardLayout title="All Stock" activeNav="cameras">
+    <DashboardLayout title="Image Upload" activeNav="cameras">
       <UploadImage />
     </DashboardLayout>
   );
