@@ -1,6 +1,6 @@
 # StockSpies Frontend
 
-Vite + React Router app for uploading an image and calling the backend. This repo includes a dev-only mock API so the UI works even if the backend is down.
+Vite + React Router app for uploading an image and calling the backend. 
 
 ## Quick Start (Frontend)
 
