@@ -4,6 +4,8 @@ Vite + React Router app for uploading an image and calling the backend.
 
 ## Quick Start (Frontend)
 
+In order to run npm commands, you'll need [Node.js](https://nodejs.org/en)
+
 ```bash
 npm install
 
